@@ -1,0 +1,312 @@
+{
+    "computer_science_courses": {
+        "description": "Here are the key Computer Science courses and their prerequisites. Ensure you have met all prerequisites before enrolling in a course.",
+       "computer_science_courses": [
+    {
+      "course_code": "MATH 241",
+      "course_name": "Calculus I",
+      "credits": 4,
+      "prerequisites": ["ENGR 101", "MATH 114", "MATH 141", "Departmental permission"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "MATH 242",
+      "course_name": "Calculus II",
+      "credits": 4,
+      "prerequisites": ["MATH 241 (Grade “C” or higher)", "Departmental permission"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "MATH 312",
+      "course_name": "Linear Algebra I",
+      "credits": 3,
+      "prerequisites": ["MATH 241 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "MATH 313",
+      "course_name": "Linear Algebra II",
+      "credits": 3,
+      "prerequisites": ["MATH 312 (Grade “C” or higher)", "MATH 312 (Grade “C” or higher) with TR"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "MATH 331",
+      "course_name": "Applied Probability and Statistics",
+      "credits": 3,
+      "prerequisites": ["MATH 242 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 111",
+      "course_name": "Introduction to Computer Science I",
+      "credits": 4,
+      "prerequisites": [],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 112",
+      "course_name": "Introduction to Computer Science II",
+      "credits": 4,
+      "prerequisites": ["COSC 111 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 220",
+      "course_name": "Data Structures and Algorithms Analysis",
+      "credits": 4,
+      "prerequisites": ["COSC 112 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 241",
+      "course_name": "Computer Systems & Digital Logic",
+      "credits": 3,
+      "prerequisites": ["COSC 112", "MATH 141 (Grade “C” or higher)", "Departmental permission"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 281",
+      "course_name": "Discrete Structures",
+      "credits": 3,
+      "prerequisites": ["COSC 112 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 349",
+      "course_name": "Computer Networks",
+      "credits": 3,
+      "prerequisites": ["COSC 243 (Grade “C” or higher for Fall 2024)", "COSC 112 (Grade “C” or higher for Spring 2025)"],
+      "offered": ["As Needed"]
+    },
+    {
+      "course_code": "COSC 351",
+      "course_name": "Foundations of Computer Security and Information Assurance",
+      "credits": 3,
+      "prerequisites": ["COSC 112 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 352",
+      "course_name": "Organization of Programming Languages",
+      "credits": 3,
+      "prerequisites": ["COSC 220 (Grade “C” or higher)", "COSC 220 with minimum grade of TR"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 354",
+      "course_name": "Operating Systems",
+      "credits": 3,
+      "prerequisites": ["COSC 220 (Grade “C” or higher)", "COSC 241 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 458",
+      "course_name": "Parallel Algorithms or Software Engineering",
+      "credits": 3,
+      "prerequisites": ["COSC 220 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 459",
+      "course_name": "Database Design",
+      "credits": 3,
+      "prerequisites": ["COSC 220 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 238",
+      "course_name": "Object Oriented Programming",
+      "credits": 4,
+      "prerequisites": ["COSC 112 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "CLCO 261",
+      "course_name": "Intro to Cloud Computing",
+      "credits": 3,
+      "prerequisites": ["COSC 112 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 385",
+      "course_name": "Theory of Language and Automata",
+      "credits": 3,
+      "prerequisites": ["COSC 220", "COSC 281 (Grade “C” or higher)"],
+      "offered": ["As Needed"]
+    },
+    {
+      "course_code": "COSC 239",
+      "course_name": "JAVA Programming",
+      "credits": 3,
+      "prerequisites": ["COSC 112 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 243",
+      "course_name": "Computer Architecture",
+      "credits": 3,
+      "prerequisites": ["COSC 241 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 251",
+      "course_name": "Introduction to Data Science",
+      "credits": 3,
+      "prerequisites": ["COSC 112 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 320",
+      "course_name": "Algorithm Design and Analysis",
+      "credits": 3,
+      "prerequisites": ["COSC 220 (Grade “C” or higher)", "COSC 281 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 323",
+      "course_name": "Introduction to Cryptography",
+      "credits": 3,
+      "prerequisites": ["COSC 238 (Grade “C” or higher)", "MATH 312 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 332",
+      "course_name": "Introduction to Game Design and Development",
+      "credits": 3,
+      "prerequisites": ["COSC 112 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 338",
+      "course_name": "Mobile App Design and Development",
+      "credits": 3,
+      "prerequisites": ["COSC 238 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 383",
+      "course_name": "Num Methods and Programming",
+      "credits": 3,
+      "prerequisites": ["MATH 242 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 386",
+      "course_name": "Intro to Quantum Computing",
+      "credits": 3,
+      "prerequisites": ["COSC 220 (Grade “C” or higher)", "MATH 312 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 470",
+      "course_name": "Artificial Intelligence",
+      "credits": 3,
+      "prerequisites": ["COSC 220 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 472",
+      "course_name": "Intro to Machine Learning",
+      "credits": 3,
+      "prerequisites": ["COSC 112 (Grade “C” or higher)", "MATH 312 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 460",
+      "course_name": "Computer Graphics",
+      "credits": 3,
+      "prerequisites": ["COSC 220 (Grade “C” or higher)", "MATH 241 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 480",
+      "course_name": "Intro to Image Processing and Analysis",
+      "credits": 3,
+      "prerequisites": ["COSC 220 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 491",
+      "course_name": "Conference Course",
+      "credits": 3,
+      "prerequisites": [],
+      "offered": ["As Needed"]
+    },
+    {
+      "course_code": "COSC 498",
+      "course_name": "Senior Internship",
+      "credits": 3,
+      "prerequisites": ["3.0 GPA", "Senior standing", "Department Chair permission required"],
+      "offered": ["As Needed"]
+    },
+    {
+      "course_code": "COSC 499",
+      "course_name": "Teaching or Research Assistant",
+      "credits": 3,
+      "prerequisites": ["3.0 GPA", "Senior standing", "Department Chair permission required"],
+      "offered": ["As Needed"]
+    },
+    {
+      "course_code": "CLCO 471",
+      "course_name": "Data Analytics in the Cloud",
+      "credits": 3,
+      "prerequisites": ["CLCO 261 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "BUAD 326",
+      "course_name": "Business, Ethics, and Society",
+      "credits": 3,
+      "prerequisites": ["MGMT 324 (Grade “C” or higher)", "MKTG 331 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "INSS 391",
+      "course_name": "IT Infrastructure and Security",
+      "credits": 3,
+      "prerequisites": ["INSS 360 (Grade “C” or higher)", "INSS 360 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "INSS 494",
+      "course_name": "Information Security and Risk Management",
+      "credits": 3,
+      "prerequisites": ["INSS 391 (Grade “C” or higher)", "INSS 391 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "EEGR 481",
+      "course_name": "Introduction to Network Security",
+      "credits": 3,
+      "prerequisites": ["EEGR 317 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "EEGR 483",
+      "course_name": "Introduction to Security Management",
+      "credits": 3,
+      "prerequisites": ["EEGR 317 (Grade “C” or higher)"],
+      "offered": ["Fall", "Spring"]
+    },
+    {
+      "course_code": "COSC 490",
+      "course_name": "Senior Project",
+      "credits": 3,
+      "prerequisites": ["Department Chair permission", "Senior standing required"],
+      "offered": ["As Needed"]
+    },
+    {
+      "course_code": "COSC 001",
+      "course_name": "Computer Science Senior Comprehensive Exam",
+      "credits": 0,
+      "prerequisites": [],
+      "offered": ["As Needed"]
+    }
+  ]
+      },
+      "additional_information": {
+        "website": "https://catalog.morgan.edu/preview_program.php?catoid=26&poid=5968&returnto=1880",
+        "note": "For more detailed information, including course descriptions and prerequisites, please refer to the Morgan State University Undergraduate Catalog."
+      }
+}

@@ -1,0 +1,7 @@
+langchain
+openai
+pinecone
+langchain-pinecone
+langchain-openai
+python-dotenv
+pypdf
