@@ -1,53 +1,92 @@
-
+# backend/chatbot.py
 import os
+import time
 import warnings
+
 from dotenv import load_dotenv
+from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain_openai import OpenAIEmbeddings
-from langchain.chains import ConversationalRetrievalChain
-from langchain_community.chat_models import ChatOpenAI
 from langchain_pinecone import PineconeVectorStore
+from langchain_community.chat_models import ChatOpenAI
+from langchain.chains import ConversationalRetrievalChain
 
 warnings.filterwarnings("ignore")
 
-load_dotenv()
+# ─── Load environment ────────────────────────────────────────────────────────────
+load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+REDACTED      = os.getenv("REDACTED")
+PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME")
 
+if not REDACTED or not PINECONE_INDEX_NAME:
+    raise RuntimeError("Missing REDACTED or PINECONE_INDEX_NAME in .env")
+
+# ─── Global chat history ─────────────────────────────────────────────────────────
 chat_history = []
 
-# Add context to instruct the LLM about its role
+# ─── A little system prompt to bias toward including URLs verbatim ──────────────
 system_context = """
+You are the Morgan State CS chatbot. Use any retrieved context to answer concisely,
+and if you see URLs in the context, include them exactly as shown.
 """
 
-if __name__ == "__main__":
-    embeddings = OpenAIEmbeddings(openai_api_key=os.environ.get("REDACTED"))
-    vectorstore = PineconeVectorStore(index_name=os.environ["INDEX_NAME"], embedding=embeddings)
+def main():
+    # 1) Initialize the OpenAI embeddings and Pinecone-backed vector store
+    embeddings = OpenAIEmbeddings(openai_api_key=REDACTED)
+    vectorstore = PineconeVectorStore(
+        index_name=PINECONE_INDEX_NAME,
+        embedding=embeddings
+    )
 
-    chat = ChatOpenAI(verbose=True, temperature=0, model_name="gpt-3.5-turbo")
+    # 2) Build a retriever with Maximal Marginal Relevance (MRR) for diversity
+    retriever = vectorstore.as_retriever(
+        search_type="mmr",
+        search_kwargs={"k": 5, "fetch_k": 10}
+    )
 
-    # Creating the conversational retrieval chain with Pinecone VectorStore
+    # 3) Create a streaming-capable ChatOpenAI instance
+    chat = ChatOpenAI(
+        model_name="gpt-3.5-turbo",
+        temperature=0.0,
+        streaming=True,
+        callbacks=[StreamingStdOutCallbackHandler()],
+        verbose=False
+    )
+
+    # 4) Put them together in a conversational retrieval chain
     qa = ConversationalRetrievalChain.from_llm(
-        llm=chat, chain_type="stuff", retriever=vectorstore.as_retriever()
+        llm=chat,
+        chain_type="stuff",
+        retriever=retriever
     )
 
     print("\nAI Chatbot is ready! Type 'exit' to quit.\n")
 
     while True:
-        # Get user input from the terminal
-        user_question = input("You: ")
-
-        # Exit condition
-        if user_question.lower() in ["exit", "quit"]:
+        user_question = input("You: ").strip()
+        if user_question.lower() in ("exit", "quit"):
             print("Goodbye!")
             break
 
-        # Add system context to the user question to guide the model's behavior
-        context_question = system_context + "\n\n" + user_question
+        # 5) Build the full prompt with your system context
+        prompt = system_context + "\n\n" + user_question
 
-        # Query the LLM with the user question and conversation history
-        res = qa({"question": context_question, "chat_history": chat_history})
+        # 6) Time the retrieval step
+        t0 = time.time()
+        docs = retriever.get_relevant_documents(prompt)
+        t1 = time.time()
 
-        # Retrieve and print the response
-        ai_response = res["answer"]
-        print(f"Code Orange Code Blue: {ai_response}\n")
+        # 7) Stream the generation
+        print("Bot: ", end="", flush=True)
+        t2 = time.time()
+        qa({"question": prompt, "chat_history": chat_history})
+        t3 = time.time()
+        print("\n")  # finish the line after streaming
 
-        # Update chat history for context tracking
-        chat_history.append((user_question, ai_response))
+        # 8) Print timings for debugging
+        print(f"[Retrieval: {t1-t0:.2f}s | Generation: {t3-t2:.2f}s]\n")
+
+        # 9) Store minimal history (you could store full responses too)
+        chat_history.append((user_question, "<response streamed>"))
+
+if __name__ == "__main__":
+    main()

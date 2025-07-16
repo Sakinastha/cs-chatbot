@@ -1,27 +1,24 @@
+# empty_pinecone.py
 import os
+import pinecone
 from dotenv import load_dotenv
-# import pinecone
-from pinecone import Pinecone
 
-
-# Load environment variables
+# 1) Load your env vars
 load_dotenv()
+api_key       = os.getenv("PINECONE_API_KEY")
+environment   = os.getenv("PINECONE_ENV")        
+index_name    = os.getenv("PINECONE_INDEX_NAME")  # your index name
 
-# Retrieve Pinecone API key and environment from the environment variables
-api_key = os.getenv("PINECONE_API_KEY")
-environment = os.getenv("PINECONE_ENV")
+if not api_key or not environment or not index_name:
+    raise ValueError("Make sure PINECONE_API_KEY, PINECONE_ENV, and PINECONE_INDEX_NAME are set in .env")
 
-# Initialize Pinecone
-pc = Pinecone(api_key=api_key)
+# 2) Initialize the Pinecone client
+pinecone.init(api_key=api_key, environment=environment)
 
-# Specify the index name you want to delete
-index_name = os.getenv("PINECONE_INDEX_NAME")
+# 3) Connect to your index
+index = pinecone.Index(index_name)
 
-
-
-# To get the unique host for an index, 
-# see https://docs.pinecone.io/guides/data/target-an-index
-index = pc.Index(host="https://vectorized-datasource-76i6d2b.svc.aped-4627-b74a.pinecone.io")
-
-index.delete(delete_all=True, namespace='')
-
+# 4) Delete all vectors in the default namespace
+print(f"Clearing all vectors from index '{index_name}'...")
+index.delete(delete_all=True)
+print("Done.")

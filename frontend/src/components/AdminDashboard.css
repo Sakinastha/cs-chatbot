@@ -1,0 +1,43 @@
+/* AdminDashboard.css */
+.admin-actions {
+  display: inline-flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+}
+.admin-table th,
+.admin-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+.admin-table th {
+  background: #f0f0f0;
+}
+.admin-table tr:nth-child(even) {
+  background: #fafafa;
+}
+.admin-table button {
+  background: #e74c3c;
+  color: #fff;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.admin-table button:hover {
+  background: #c0392b;
+}
+
+.admin-actions button {
+  margin-right: 8px;
+}
+
+.admin-actions button:last-child {
+  margin-right: 0;
+}
+

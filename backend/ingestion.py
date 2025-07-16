@@ -1,68 +1,133 @@
-
+# ingestion.py
 import os
 import json
+import time
+from typing import List, Any, Dict, Optional
 from dotenv import load_dotenv
-from langchain_text_splitters import CharacterTextSplitter
+
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
+from pinecone import Pinecone, ServerlessSpec
 
-load_dotenv()
+# ─── Load environment ───────────────────────────────────────────────────────────
+BASE_DIR = os.path.dirname(__file__)
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-def load_json_documents(file_paths):
-    documents = []
-    for file_path in file_paths:
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, dict):  
-                # Split text based on keys and values
-                for key, value in data.items():
-                    text = f"{key}: {value}"
-                    documents.append({"text": text, "source": file_path})
-            elif isinstance(data, list): 
-                # For lists, treat each element as a chunk
-                for obj in data:
-                    text = "\n".join([f"{key}: {value}" for key, value in obj.items()])
-                    documents.append({"text": text, "source": file_path})
-    return documents
+PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
+PINECONE_ENV     = os.getenv("PINECONE_ENV")
+PINECONE_INDEX   = os.getenv("PINECONE_INDEX_NAME")
+REDACTED   = os.getenv("REDACTED")
 
-if __name__ == "__main__":
-    print("Ingesting data...")
-
-    # List of your JSON files
-    json_files = ["datasource/degree.json", "datasource/Department.json", "datasource/advising.json", "datasource/academic_resources.json", "datasource/classes.json"]
-    
-    # Load the raw documents with source metadata
-    raw_documents = load_json_documents(json_files)
-
-    # Reducing the chunk size to 500 characters to avoid exceeding token limits
-    text_splitter = CharacterTextSplitter(chunk_size=500, chunk_overlap=50)  # Smaller chunk size and overlap
-    
-    texts = []
-    metadatas = []
-    
-    for doc in raw_documents:
-        doc_text = doc['text']
-        doc_metadata = {"source": doc['source']}  # Adding the source file as metadata
-        
-        # Split the text into chunks
-        chunks = text_splitter.create_documents([doc_text])
-        
-        # Store each chunk and its associated metadata
-        for chunk in chunks:
-            texts.append(chunk.page_content)  # Extracting text content from Document object
-            metadatas.append(doc_metadata)
-    
-    print(f"Created {len(texts)} chunks.")
-
-    # Initialize embeddings
-    embeddings = OpenAIEmbeddings(openai_api_key=os.environ.get("REDACTED"))
-
-    # Initialize PineconeVectorStore and store the documents along with metadata
-    index_name = os.environ.get("INDEX_NAME")
-    pinecone_vector_store = PineconeVectorStore.from_texts(
-        texts, embeddings, metadatas=metadatas, index_name=index_name
+if not all([PINECONE_API_KEY, PINECONE_ENV, PINECONE_INDEX, REDACTED]):
+    raise RuntimeError(
+        "Missing one of: PINECONE_API_KEY, PINECONE_ENV, "
+        "PINECONE_INDEX_NAME, REDACTED"
     )
 
-    print(f"Data has been successfully ingested into Pinecone index: {index_name}")
+# ─── Initialize Pinecone client & index ────────────────────────────────────────
+pc = Pinecone(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
+if PINECONE_INDEX not in pc.list_indexes().names():
+    pc.create_index(
+        name=PINECONE_INDEX,
+        dimension=1536,
+        metric="cosine",
+        spec=ServerlessSpec(cloud="aws", region=PINECONE_ENV),
+    )
+default_index = pc.Index(PINECONE_INDEX)
 
 
+def normalize_keys(obj: Any) -> Any:
+    """Lower-case all dict keys and replace 'head' → 'chair'."""
+    if isinstance(obj, dict):
+        return {
+            k.lower().replace("head", "chair"): normalize_keys(v)
+            for k, v in obj.items()
+        }
+    if isinstance(obj, list):
+        return [normalize_keys(v) for v in obj]
+    return obj
+
+
+def load_json_documents(paths: List[str]) -> List[Dict]:
+    """
+    Given a list of file paths, load each JSON, normalize keys,
+    pretty-print the entire JSON, and return a list of:
+      { "text": <pretty_json_str>, "metadata": {"source": <filename>} }
+    """
+    docs: List[Dict] = []
+    for path in paths:
+        if not os.path.exists(path):
+            print(f"⚠️  Skipping missing file: {path}")
+            continue
+        fn = os.path.basename(path)
+        try:
+            raw = json.load(open(path, encoding="utf-8"))
+            norm = normalize_keys(raw)
+            pretty = json.dumps(norm, indent=2, ensure_ascii=False)
+            docs.append({"text": pretty, "metadata": {"source": fn}})
+        except Exception as e:
+            print(f"⚠️  Failed to parse {fn}: {e}")
+    return docs
+
+
+async def ingest_data(
+    file_paths: Optional[List[str]] = None,
+    pinecone_index=None
+) -> None:
+    """
+    Ingest given JSON file paths (or all under data_sources if None):
+    1) Load & normalize each JSON
+    2) Split into 500-token chunks (200 overlap)
+    3) Embed with OpenAI and upsert into Pinecone
+    """
+    # choose index
+    idx = pinecone_index or default_index
+
+    # if no specific files passed, ingest everything in data_sources/
+    if not file_paths:
+        data_dir = os.path.join(BASE_DIR, "data_sources")
+        file_paths = [
+            os.path.join(data_dir, f)
+            for f in sorted(os.listdir(data_dir))
+            if f.lower().endswith(".json")
+        ]
+
+    docs = load_json_documents(file_paths)
+    if not docs:
+        print("⚠️  No JSON documents found to ingest.")
+        return
+
+    # chunking
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=300,
+        separators=["\n\n", "\n", " ", ""],
+    )
+    texts, metadatas = [], []
+    for doc in docs:
+        for chunk in splitter.split_text(doc["text"]):
+            texts.append(chunk)
+            metadatas.append(doc["metadata"])
+
+    # embed & upsert
+    embeds = OpenAIEmbeddings(openai_api_key=REDACTED)
+    PineconeVectorStore.from_texts(
+        texts,
+        embeds,
+        metadatas=metadatas,
+        index_name=None,          # NOTE: explicitly pass None so we use the index handle
+        index=idx                 # <- inject the existing Index object
+    )
+
+    # report
+    stats = pc.describe_index(PINECONE_INDEX)
+    total = stats.status.total_vector_count
+    print(f"✅ Upserted {len(texts)} chunks. Total vectors now: {total}")
+
+
+if __name__ == "__main__":
+    start = time.time()
+    import asyncio
+    asyncio.run(ingest_data())
+    print(f"✔️  Done in {time.time()-start:.1f}s")
