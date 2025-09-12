@@ -1,0 +1,55 @@
+# version: "3.8"   # optional; Compose v2 ignores 'version'
+
+services:
+  db:
+    image: mysql:8.0
+    platform: linux/amd64
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: chatbot
+      MYSQL_USER: chatuser
+      MYSQL_PASSWORD: StrongPass!
+    command: >
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -uroot -prootpass || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  backend:
+    image: sakina593/chatbot:backend
+    platform: linux/amd64
+    env_file:
+      - ./backend/.env
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: chatbot
+      DB_USER: chatuser
+      DB_PASSWORD: StrongPass!
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "5050:5000"
+    restart: unless-stopped
+
+  frontend:
+    image: sakina593/chatbot-frontend:v2
+    platform: linux/amd64
+    environment:
+      - VITE_API_BASE_URL=http://18.214.136.155:5000
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    restart: unless-stopped
+
+volumes:
+  db_data:
