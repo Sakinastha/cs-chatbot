@@ -1,24 +1,28 @@
-# empty_pinecone.py
+# reset_index.py
 import os
-import pinecone
 from dotenv import load_dotenv
+from pinecone import Pinecone, ServerlessSpec
 
-# 1) Load your env vars
 load_dotenv()
-api_key       = os.getenv("PINECONE_API_KEY")
-environment   = os.getenv("PINECONE_ENV")        
-index_name    = os.getenv("PINECONE_INDEX_NAME")  # your index name
+API_KEY    = os.getenv("PINECONE_API_KEY")
+INDEX_NAME = os.getenv("PINECONE_INDEX_NAME")
+REGION     = os.getenv("PINECONE_ENV") or "us-east-1"   # your region
+DIM        = 1536                                       # your embedding dim
+METRIC     = "cosine"
 
-if not api_key or not environment or not index_name:
-    raise ValueError("Make sure PINECONE_API_KEY, PINECONE_ENV, and PINECONE_INDEX_NAME are set in .env")
+pc = Pinecone(api_key=API_KEY)
 
-# 2) Initialize the Pinecone client
-pinecone.init(api_key=api_key, environment=environment)
+# Delete if it exists
+if INDEX_NAME in pc.list_indexes().names():
+    print(f"Deleting index {INDEX_NAME}…")
+    pc.delete_index(INDEX_NAME)
 
-# 3) Connect to your index
-index = pinecone.Index(index_name)
-
-# 4) Delete all vectors in the default namespace
-print(f"Clearing all vectors from index '{index_name}'...")
-index.delete(delete_all=True)
+# Recreate
+print(f"Recreating index {INDEX_NAME}…")
+pc.create_index(
+    name=INDEX_NAME,
+    dimension=DIM,
+    metric=METRIC,
+    spec=ServerlessSpec(cloud="aws", region=REGION),
+)
 print("Done.")

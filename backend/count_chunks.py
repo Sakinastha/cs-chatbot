@@ -1,28 +1,26 @@
-# backend/count_chunks.py
+# count_chunks.py
+import os, json
+from dotenv import load_dotenv
+from langchain.text_splitter import TokenTextSplitter
 
-import os
-import json
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+BASE_DIR = os.path.dirname(__file__)
+DATA_DIR = os.path.join(BASE_DIR, "data_sources")
 
-# Since this script lives in backend/, data_sources is a subfolder here:
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data_sources")
+def normalize_keys(obj):
+    if isinstance(obj, dict):
+        return {k.lower().replace("head", "chair"): normalize_keys(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [normalize_keys(v) for v in obj]
+    return obj
 
-splitter = RecursiveCharacterTextSplitter(
-    chunk_size=500,
-    chunk_overlap=200,
-    separators=["\n\n", "\n", " ", ""]
+splitter = TokenTextSplitter(
+    chunk_size=800,
+    chunk_overlap=150,
+    model_name="gpt-3.5-turbo",
 )
 
-for fname in sorted(os.listdir(DATA_DIR)):
-    if not fname.lower().endswith(".json"):
-        continue
-    path = os.path.join(DATA_DIR, fname)
-    try:
-        data = json.load(open(path, encoding="utf-8"))
-    except Exception as e:
-        print(f"{fname:30} → ERROR loading JSON: {e}")
-        continue
-
-    text = json.dumps(data, indent=2)
-    chunks = splitter.split_text(text)
-    print(f"{fname:30} → {len(chunks):3d} chunks")
+for fn in sorted(f for f in os.listdir(DATA_DIR) if f.lower().endswith(".json")):
+    with open(os.path.join(DATA_DIR, fn), encoding="utf-8") as f:
+        pretty = json.dumps(normalize_keys(json.load(f)), indent=2, ensure_ascii=False)
+    n = len(splitter.split_text(pretty))
+    print(f"{fn:30} → {n:3d} chunks")

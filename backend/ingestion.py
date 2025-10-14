@@ -1,60 +1,79 @@
 # ingestion.py
+
 import os
+import re
 import json
 import time
-from typing import List, Any, Dict, Optional
-from dotenv import load_dotenv
+import hashlib
+import asyncio
+from typing import List, Dict, Optional, Any
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from dotenv import load_dotenv
+from langchain.text_splitter import TokenTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone, ServerlessSpec
 
-# ─── Load environment ───────────────────────────────────────────────────────────
+# ── Load env ───────────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(__file__)
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
-PINECONE_ENV     = os.getenv("PINECONE_ENV")
-PINECONE_INDEX   = os.getenv("PINECONE_INDEX_NAME")
-REDACTED   = os.getenv("REDACTED")
+PINECONE_ENV     = os.getenv("PINECONE_ENV")            # e.g., "us-east-1"
+PINECONE_INDEX   = os.getenv("PINECONE_INDEX_NAME")     # e.g., "vectorized-datasource"
+OPENAI_API_KEY   = os.getenv("OPENAI_API_KEY")
+NAMESPACE        = os.getenv("PINECONE_NAMESPACE", "docs")  # <- keep in sync with backend
 
-if not all([PINECONE_API_KEY, PINECONE_ENV, PINECONE_INDEX, REDACTED]):
+if not all([PINECONE_API_KEY, PINECONE_ENV, PINECONE_INDEX, OPENAI_API_KEY]):
     raise RuntimeError(
-        "Missing one of: PINECONE_API_KEY, PINECONE_ENV, "
-        "PINECONE_INDEX_NAME, REDACTED"
+        "Missing one of: PINECONE_API_KEY, PINECONE_ENV, PINECONE_INDEX_NAME, OPENAI_API_KEY"
     )
 
-# ─── Initialize Pinecone client & index ────────────────────────────────────────
-pc = Pinecone(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
-if PINECONE_INDEX not in pc.list_indexes().names():
-    pc.create_index(
-        name=PINECONE_INDEX,
-        dimension=1536,
-        metric="cosine",
-        spec=ServerlessSpec(cloud="aws", region=PINECONE_ENV),
-    )
-default_index = pc.Index(PINECONE_INDEX)
+# ── Pinecone client & index ────────────────────────────────────────────────────
+pc = Pinecone(api_key=PINECONE_API_KEY)  # v3 SDK (no pinecone.init)
 
+def _to_dict(obj):
+    return obj.to_dict() if hasattr(obj, "to_dict") else obj
 
+def ensure_index(name: str, region: str, dim: int = 1536, metric: str = "cosine") -> None:
+    """Create the index if needed and wait until it's ready."""
+    if name not in pc.list_indexes().names():
+        pc.create_index(
+            name=name,
+            dimension=dim,
+            metric=metric,
+            spec=ServerlessSpec(cloud="aws", region=region),
+        )
+    # wait until ready
+    for _ in range(60):
+        desc = _to_dict(pc.describe_index(name))
+        if desc.get("status", {}).get("ready"):
+            return
+        time.sleep(2)
+    raise TimeoutError(f"Pinecone index '{name}' not ready after waiting.")
+
+ensure_index(PINECONE_INDEX, PINECONE_ENV)
+index = pc.Index(PINECONE_INDEX)
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
 def normalize_keys(obj: Any) -> Any:
-    """Lower-case all dict keys and replace 'head' → 'chair'."""
+    """Recursively lowercase keys and rename 'head' → 'chair'."""
     if isinstance(obj, dict):
-        return {
-            k.lower().replace("head", "chair"): normalize_keys(v)
-            for k, v in obj.items()
-        }
+        return {k.lower().replace("head", "chair"): normalize_keys(v) for k, v in obj.items()}
     if isinstance(obj, list):
         return [normalize_keys(v) for v in obj]
     return obj
 
+def slug(s: str) -> str:
+    return re.sub(r"[^a-z0-9\-]+", "-", s.lower())
+
+def ns_exists(idx, ns: str) -> bool:
+    """Return True if namespace currently exists (created after first upsert)."""
+    stats = _to_dict(idx.describe_index_stats())
+    return ns in (stats.get("namespaces") or {})
 
 def load_json_documents(paths: List[str]) -> List[Dict]:
-    """
-    Given a list of file paths, load each JSON, normalize keys,
-    pretty-print the entire JSON, and return a list of:
-      { "text": <pretty_json_str>, "metadata": {"source": <filename>} }
-    """
+    """Return [{'text': pretty_json, 'source': filename}, ...]."""
     docs: List[Dict] = []
     for path in paths:
         if not os.path.exists(path):
@@ -62,29 +81,23 @@ def load_json_documents(paths: List[str]) -> List[Dict]:
             continue
         fn = os.path.basename(path)
         try:
-            raw = json.load(open(path, encoding="utf-8"))
-            norm = normalize_keys(raw)
-            pretty = json.dumps(norm, indent=2, ensure_ascii=False)
-            docs.append({"text": pretty, "metadata": {"source": fn}})
+            with open(path, encoding="utf-8") as f:
+                raw = json.load(f)
+            pretty = json.dumps(normalize_keys(raw), indent=2, ensure_ascii=False)
+            docs.append({"text": pretty, "source": fn})
         except Exception as e:
             print(f"⚠️  Failed to parse {fn}: {e}")
     return docs
 
-
-async def ingest_data(
-    file_paths: Optional[List[str]] = None,
-    pinecone_index=None
-) -> None:
+# ── Main ingestion ─────────────────────────────────────────────────────────────
+async def ingest_data(file_paths: Optional[List[str]] = None) -> None:
     """
-    Ingest given JSON file paths (or all under data_sources if None):
-    1) Load & normalize each JSON
-    2) Split into 500-token chunks (200 overlap)
-    3) Embed with OpenAI and upsert into Pinecone
+    1) Pick JSON files from ./data_sources (or provided list)
+    2) Load & normalize
+    3) Split into chunks
+    4) Embed & upsert (stable IDs; per-file delete on subsequent runs)
     """
-    # choose index
-    idx = pinecone_index or default_index
-
-    # if no specific files passed, ingest everything in data_sources/
+    # 1) Discover files
     if not file_paths:
         data_dir = os.path.join(BASE_DIR, "data_sources")
         file_paths = [
@@ -93,41 +106,65 @@ async def ingest_data(
             if f.lower().endswith(".json")
         ]
 
+    # 2) Load
     docs = load_json_documents(file_paths)
     if not docs:
         print("⚠️  No JSON documents found to ingest.")
         return
 
-    # chunking
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=300,
-        separators=["\n\n", "\n", " ", ""],
+    # 3) Chunking
+    splitter = TokenTextSplitter(
+        chunk_size=800,
+        chunk_overlap=150,
+        model_name="gpt-3.5-turbo",
     )
-    texts, metadatas = [], []
+
+    # 4) Embeddings + vector store handle (1536-dim model)
+    embeddings = OpenAIEmbeddings(
+        openai_api_key=OPENAI_API_KEY,
+        model="text-embedding-3-small",
+    )
+    vstore = PineconeVectorStore.from_existing_index(
+        embedding=embeddings,
+        index_name=PINECONE_INDEX,
+        namespace=NAMESPACE,
+    )
+
+    total_chunks = 0
+    first_run = not ns_exists(index, NAMESPACE)
+
     for doc in docs:
-        for chunk in splitter.split_text(doc["text"]):
+        src = doc["source"]
+        src_key = slug(src)
+
+        # On re-ingest, remove prior vectors for that file (skip on first run)
+        if first_run:
+            print(f"⏭️  Namespace '{NAMESPACE}' not present yet; skipping delete for {src}.")
+        else:
+            index.delete(filter={"source": src}, namespace=NAMESPACE)
+
+        # Split and build stable IDs (file slug + chunk index + short content hash)
+        chunks = splitter.split_text(doc["text"])
+        texts, metadatas, ids = [], [], []
+        for i, chunk in enumerate(chunks):
+            short = hashlib.sha1(chunk.encode("utf-8")).hexdigest()[:10]
+            ids.append(f"{src_key}-{i:05d}-{short}")
             texts.append(chunk)
-            metadatas.append(doc["metadata"])
+            metadatas.append({"source": src, "chunk": i})
 
-    # embed & upsert
-    embeds = OpenAIEmbeddings(openai_api_key=REDACTED)
-    PineconeVectorStore.from_texts(
-        texts,
-        embeds,
-        metadatas=metadatas,
-        index_name=None,          # NOTE: explicitly pass None so we use the index handle
-        index=idx                 # <- inject the existing Index object
-    )
+        if texts:
+            vstore.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+            total_chunks += len(texts)
+            print(f"📦 {src}: upserted {len(texts)} chunks")
 
-    # report
-    stats = pc.describe_index(PINECONE_INDEX)
-    total = stats.status.total_vector_count
-    print(f"✅ Upserted {len(texts)} chunks. Total vectors now: {total}")
+    # Pinecone stats can lag briefly; wait and then read per-namespace count
+    time.sleep(3)
+    stats = _to_dict(index.describe_index_stats())
+    ns_total = stats.get("namespaces", {}).get(NAMESPACE, {}).get("vector_count", 0)
+    print(f"✅ Upserted {total_chunks} chunks. Total in namespace '{NAMESPACE}': {ns_total}")
 
-
+# ── Entrypoint ─────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     start = time.time()
-    import asyncio
     asyncio.run(ingest_data())
-    print(f"✔️  Done in {time.time()-start:.1f}s")
+    print(f"✔️  Done in {time.time() - start:.1f}s")

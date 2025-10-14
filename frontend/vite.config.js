@@ -1,16 +1,33 @@
 // vite.config.js
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
   server: {
+    port: 5173,
     proxy: {
-      // any request to /api, /ingest, /clear-index, /chat will forward to port 5000
-      "/api": "http://localhost:5000",
-      "/ingest": "http://localhost:5000",
-      "/clear-index": "http://localhost:5000",
-      "/chat": "http://localhost:5000",
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+        // 🔧 Removed the rewrite rule to preserve `/api/...` path
+      },
+      '/chat': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+      },
+      '/reset-history': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+      },
+      '/chat-history': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+      },
+      '/curriculum': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+      }
     },
   },
-});
+})

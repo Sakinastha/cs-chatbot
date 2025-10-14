@@ -8,7 +8,9 @@ export default function CurriculumPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("http://localhost:5000/api/curriculum")
+    fetch(`http://18.214.136.155:5000/api/curriculum`)
+
+
       .then((res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.json();

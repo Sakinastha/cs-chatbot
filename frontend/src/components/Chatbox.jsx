@@ -1,3 +1,5 @@
+// src/components/Chatbox.jsx
+
 import React, { useState, useEffect, useRef } from "react";
 import { FaMicrophone } from "@react-icons/all-files/fa/FaMicrophone";
 import { FaPaperPlane } from "@react-icons/all-files/fa/FaPaperPlane";
@@ -7,35 +9,94 @@ import { FaHistory } from "@react-icons/all-files/fa/FaHistory";
 import { FaTrash } from "@react-icons/all-files/fa/FaTrash";
 import "./Chatbox.css";
 
+
+const API_BASE = (import.meta.env.VITE_API_BASE_URL?.trim() || "").replace(/\/$/, "");
+
+
 const SUGGESTIONS = [
   "Who is the chair of computer science department?",
   "What are the degree requirements?",
-  "What is the first day of class for fall 2025?",
+  "What is the first day of class for fall 2025?"
 ];
 const STORAGE_KEY = "chat_history";
 
-// Helper: split text into pieces of [plain, link, plain, link...]
+// Helper to decode JWT payload
+function decodeJwt(token) {
+  try {
+    const base64 = token.split(".")[1]
+      .replace(/-/g, "+")
+      .replace(/_/g, "/");
+    const json = atob(base64);
+    return JSON.parse(json);
+  } catch {
+    return {};
+  }
+}
+
+// Helper: split text into React nodes, handling markdown and raw URLs
 function linkify(text) {
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  const parts = text.split(urlRegex);
-  return parts.map((part, idx) =>
-    urlRegex.test(part) ? (
-      <a
-        key={idx}
-        href={part}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="message-link"
-      >
-        {part}
-      </a>
-    ) : (
-      <span key={idx}>{part}</span>
-    )
-  );
+  const mdRegex = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g;
+  const parts = text.split(mdRegex);
+  const nodes = [];
+
+  for (let i = 0; i < parts.length; ) {
+    if (i % 3 === 0) {
+      nodes.push(<span key={i}>{parts[i]}</span>);
+      i += 1;
+    } else {
+      const label = parts[i];
+      const url = parts[i + 1];
+      nodes.push(
+        <a
+          key={i}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="message-link"
+        >
+          {label}
+        </a>
+      );
+      i += 2;
+    }
+  }
+
+  return nodes.flatMap((node, idx) => {
+    if (typeof node === "string" || node.type === undefined) {
+      const textContent = node.props ? node.props.children : node;
+      const urlRegex = /(https?:\/\/[^\s.,;!?)]+[^\s.,;!?)])/g;
+      const pieces = textContent.split(urlRegex);
+      return pieces.map((piece, j) => {
+        const m = piece.match(
+          /^(https?:\/\/[^\s.,;!?)]+[^\s.,;!?)])([.,;!?)])?$/
+        );
+        if (m) {
+          const url = m[1];
+          const trailing = m[2] || "";
+          return (
+            <React.Fragment key={`${idx}-${j}`}>
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="message-link"
+              >
+                {url}
+              </a>
+              {trailing}
+            </React.Fragment>
+          );
+        }
+        return <span key={`${idx}-${j}`}>{piece}</span>;
+      });
+    } else {
+      return node;
+    }
+  });
 }
 
 export default function Chatbox() {
+  // — State & refs —
   const [messages, setMessages] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     return saved ? JSON.parse(saved) : [];
@@ -52,42 +113,75 @@ export default function Chatbox() {
   const [currentSessionId, setCurrentSessionId] = useState(
     () => chatSessions[0]?.id || Date.now()
   );
+  const [greeted, setGreeted] = useState(false);
   const messagesEndRef = useRef(null);
 
+  // Build Auth header helper
+  const getAuthHeader = () => {
+    const token = localStorage.getItem("token");
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  // 1) Persist messages
   useEffect(() => {
-    // Sync messages to the current session
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+  }, [messages]);
+
+  // 2) Persist sessions
+  useEffect(() => {
+    localStorage.setItem(
+      `${STORAGE_KEY}_sessions`,
+      JSON.stringify(chatSessions)
+    );
+  }, [chatSessions]);
+
+  // 3) Sync current session data
+  useEffect(() => {
     setChatSessions((prev) =>
       prev.map((s) =>
         s.id === currentSessionId ? { ...s, messages } : s
       )
     );
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
-    localStorage.setItem(
-      `${STORAGE_KEY}_sessions`,
-      JSON.stringify(chatSessions)
-    );
-  }, [messages, chatSessions, currentSessionId]);
+  }, [messages, currentSessionId]);
 
+  // Scroll to bottom on new messages or panel toggle
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, showHistoryPanel]);
 
+  // One-time login greeting
+  useEffect(() => {
+    if (greeted || messages.length > 0) return;
+    const token = localStorage.getItem("token");
+    if (token) {
+      const { email } = decodeJwt(token);
+      if (email) {
+        addMessage(`Logged in as ${email}`, "bot");
+      }
+    }
+    setGreeted(true);
+  }, [greeted, messages]);
+
+  // Helper to add a message
   const addMessage = (text, sender) => {
     const time = new Date().toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
-    const newMessage = { text, sender, time };
-    setMessages((prev) => [...prev, newMessage]);
+    setMessages((prev) => [...prev, { text, sender, time }]);
   };
 
+  // Send user query to /chat
   const sendQuery = async (query) => {
     addMessage(query, "user");
     setIsLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/chat", {
+      const res = await fetch(`${API_BASE}/chat`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeader(),
+        },
         body: JSON.stringify({ query }),
       });
       if (!res.ok) throw new Error(res.statusText);
@@ -130,7 +224,9 @@ export default function Chatbox() {
 
   const handleViewHistory = async () => {
     try {
-      const res = await fetch("http://localhost:5000/chat-history");
+      const res = await fetch(`${API_BASE}/chat-history`, {
+        headers: getAuthHeader(),
+      });
       if (!res.ok) throw new Error("Failed to fetch history");
       const { history } = await res.json();
       setServerHistory(history);
@@ -142,46 +238,52 @@ export default function Chatbox() {
   };
 
   const handleNewChat = () => {
-    const newSessionId = Date.now();
-    setChatSessions((prev) => [
-      ...prev,
-      { id: newSessionId, messages: [] },
-    ]);
-    setCurrentSessionId(newSessionId);
+    const newId = Date.now();
+    setChatSessions((prev) => [...prev, { id: newId, messages: [] }]);
+    setCurrentSessionId(newId);
     setMessages([]);
     setShowHistoryPanel(false);
-    fetch("http://localhost:5000/reset-history", { method: "POST" }).catch(
-      (e) => console.error("Failed to reset server history", e)
-    );
+    fetch(`${API_BASE}/reset-history`, {
+      method: "POST",
+      headers: getAuthHeader(),
+    }).catch(console.error);
   };
 
   const handleDeleteChat = (sessionId) => {
-    if (window.confirm("Delete this chat?")) {
-      setChatSessions((prev) => prev.filter((s) => s.id !== sessionId));
-      if (currentSessionId === sessionId) {
-        const next = chatSessions.find((s) => s.id !== sessionId);
-        if (next) {
-          setCurrentSessionId(next.id);
-          setMessages(next.messages);
-        } else {
-          handleNewChat();
-        }
+    if (!window.confirm("Delete this chat?")) return;
+    setChatSessions((prev) => prev.filter((s) => s.id !== sessionId));
+    if (currentSessionId === sessionId) {
+      const next = chatSessions.find((s) => s.id !== sessionId);
+      if (next) {
+        setCurrentSessionId(next.id);
+        setMessages(next.messages);
+      } else {
+        handleNewChat();
       }
-      fetch("http://localhost:5000/reset-history", { method: "POST" }).catch(
-        (e) => console.error("Failed to reset server history", e)
-      );
     }
+    fetch(`${API_BASE}/reset-history`, {
+      method: "POST",
+      headers: getAuthHeader(),
+    }).catch(console.error);
   };
 
   const getChatTitle = (session) => {
-    const first = session.messages[0];
-    return first
-      ? `Chat - ${new Date(first.time).toLocaleString([], {
-          dateStyle: "short",
-          timeStyle: "short",
-        })}`
-      : "New Chat";
-  };
+  const first = session.messages[0];
+
+  if (!first || !first.time) {
+    return "New Chat";
+  }
+
+  const date = new Date(first.time);
+  if (isNaN(date)) {
+    return "New Chat";
+  }
+
+  return `Chat - ${date.toLocaleString([], {
+    dateStyle: "short",
+    timeStyle: "short",
+  })}`;
+};
 
   return (
     <div className="chat-wrapper">
@@ -227,12 +329,9 @@ export default function Chatbox() {
 
       {/* Main Chat Area */}
       <div className="chat-main">
-        {/* Header */}
         <div className="bot-header">
           <h2>Computer Science Department</h2>
         </div>
-
-        {/* History panel */}
         {showHistoryPanel && (
           <div className="history-panel">
             {serverHistory.length === 0 ? (
@@ -250,8 +349,6 @@ export default function Chatbox() {
             )}
           </div>
         )}
-
-        {/* Quick replies */}
         <div className="suggestions">
           {SUGGESTIONS.map((s, i) => (
             <button
@@ -264,8 +361,6 @@ export default function Chatbox() {
             </button>
           ))}
         </div>
-
-        {/* Chat messages */}
         <div className="chat-messages">
           {messages.map((msg, i) => (
             <div key={i} className={`message ${msg.sender}`}>
@@ -273,18 +368,14 @@ export default function Chatbox() {
                 {msg.sender === "user" ? <FaUserCircle /> : <FaRobot />}
               </div>
               <div className="message-content">
-                {msg.sender === "bot"
-                  ? linkify(msg.text)
-                  : <span>{msg.text}</span>}
+                {msg.sender === "bot" ? linkify(msg.text) : <span>{msg.text}</span>}
                 <div className="timestamp">{msg.time}</div>
               </div>
             </div>
           ))}
           {isLoading && (
             <div className="message bot">
-              <div className="avatar">
-                <FaRobot />
-              </div>
+              <div className="avatar"><FaRobot/></div>
               <div className="message-content">
                 <div className="message-text">Loading...</div>
               </div>
@@ -292,8 +383,6 @@ export default function Chatbox() {
           )}
           <div ref={messagesEndRef} />
         </div>
-
-        {/* Input bar */}
         <form onSubmit={handleSend} className="chat-input">
           <input
             type="text"
@@ -309,14 +398,14 @@ export default function Chatbox() {
             disabled={isLoading || isListening}
             title={isListening ? "Listening..." : "Speak"}
           >
-            <FaMicrophone />
+            <FaMicrophone/>
           </button>
           <button
             type="submit"
             disabled={isLoading || !input.trim()}
             title="Send"
           >
-            <FaPaperPlane />
+            <FaPaperPlane/>
           </button>
         </form>
       </div>

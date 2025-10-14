@@ -1,8 +1,8 @@
 # backend/chatbot.py
+
 import os
 import time
 import warnings
-
 from dotenv import load_dotenv
 from langchain.callbacks.streaming_stdout import StreamingStdOutCallbackHandler
 from langchain_openai import OpenAIEmbeddings
@@ -13,12 +13,14 @@ from langchain.chains import ConversationalRetrievalChain
 warnings.filterwarnings("ignore")
 
 # ─── Load environment ────────────────────────────────────────────────────────────
-load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
-REDACTED      = os.getenv("REDACTED")
+BASE_DIR = os.path.dirname(__file__)
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+
+OPENAI_API_KEY      = os.getenv("OPENAI_API_KEY")
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME")
 
-if not REDACTED or not PINECONE_INDEX_NAME:
-    raise RuntimeError("Missing REDACTED or PINECONE_INDEX_NAME in .env")
+if not OPENAI_API_KEY or not PINECONE_INDEX_NAME:
+    raise RuntimeError("Missing OPENAI_API_KEY or PINECONE_INDEX_NAME in .env")
 
 # ─── Global chat history ─────────────────────────────────────────────────────────
 chat_history = []
@@ -31,16 +33,16 @@ and if you see URLs in the context, include them exactly as shown.
 
 def main():
     # 1) Initialize the OpenAI embeddings and Pinecone-backed vector store
-    embeddings = OpenAIEmbeddings(openai_api_key=REDACTED)
+    embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
     vectorstore = PineconeVectorStore(
         index_name=PINECONE_INDEX_NAME,
         embedding=embeddings
     )
 
-    # 2) Build a retriever with Maximal Marginal Relevance (MRR) for diversity
+    # 2) Build a retriever with Maximal Marginal Relevance (MMR) for diversity
     retriever = vectorstore.as_retriever(
         search_type="mmr",
-        search_kwargs={"k": 5, "fetch_k": 10}
+        search_kwargs={"k": 5, "fetch_k": 15}
     )
 
     # 3) Create a streaming-capable ChatOpenAI instance
@@ -52,7 +54,7 @@ def main():
         verbose=False
     )
 
-    # 4) Put them together in a conversational retrieval chain
+    # 4) Assemble the conversational retrieval chain
     qa = ConversationalRetrievalChain.from_llm(
         llm=chat,
         chain_type="stuff",
@@ -67,10 +69,10 @@ def main():
             print("Goodbye!")
             break
 
-        # 5) Build the full prompt with your system context
+        # 5) Build the prompt
         prompt = system_context + "\n\n" + user_question
 
-        # 6) Time the retrieval step
+        # 6) Time retrieval
         t0 = time.time()
         docs = retriever.get_relevant_documents(prompt)
         t1 = time.time()
@@ -80,12 +82,12 @@ def main():
         t2 = time.time()
         qa({"question": prompt, "chat_history": chat_history})
         t3 = time.time()
-        print("\n")  # finish the line after streaming
+        print("\n")  # finish the streaming line
 
-        # 8) Print timings for debugging
+        # 8) Print timings
         print(f"[Retrieval: {t1-t0:.2f}s | Generation: {t3-t2:.2f}s]\n")
 
-        # 9) Store minimal history (you could store full responses too)
+        # 9) Store a minimal placeholder in history
         chat_history.append((user_question, "<response streamed>"))
 
 if __name__ == "__main__":

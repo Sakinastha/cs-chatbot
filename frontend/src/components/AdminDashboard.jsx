@@ -4,7 +4,9 @@ import { FaCog } from "@react-icons/all-files/fa/FaCog";
 import "./AdminDashboard.css";
 
 
-const API_BASE = "http://localhost:5000";
+// Use env if provided, otherwise same-origin (no CORS)
+const API_BASE = (import.meta.env.VITE_API_BASE_URL?.trim() || "").replace(/\/$/, "");
+
 
 export default function AdminDashboard() {
   // form state

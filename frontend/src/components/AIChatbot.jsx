@@ -15,7 +15,7 @@ function AIChatbot() {
         }}
       />
       <h1 className="welcome-title">
-        Morgan State Computer Science Chatbot
+        Morgan State Computer Science Department
       </h1>
       <p className="welcome-subtitle">
         How can I help you today?
